@@ -220,7 +220,7 @@ function loadBulkEntryForm() {
             <tr>
                 <th>Employee</th>
                 <th>Status</th>
-                <th>OT Hours</th>
+                <th>Total Hours Worked</th>
                 <th>Work Description</th>
                 <th>Salary/Advance</th>
                 <th>Notes</th>
@@ -240,7 +240,12 @@ function loadBulkEntryForm() {
                     </select>
                 </td>
                 <td>
-                    <input type="text" class="bulk-ot" value="0" placeholder="1.30 or 1.5" style="width: 80px;">
+                    <input type="text"
+       class="bulk-total-hours"
+       value="0"
+       placeholder="8.30 = 8h 30m"
+       style="width: 90px;">
+
                 </td>
                 <td><input type="text" class="bulk-work" placeholder="Optional work description"></td>
                 <td><input type="number" class="bulk-advance" value="0" min="0"></td>
@@ -255,9 +260,13 @@ function loadBulkEntryForm() {
 
     formHTML += `</table>
         <div style="margin-top: 15px;">
-            <button type="button" id="saveBulkEntriesBtn" style="background: #28a745;">💾 Save All Entries</button>
-            <button type="button" id="clearBulkFormBtn" style="background: #6c757d;">🗑️ Clear Form</button>
-        </div>`;
+    <button type="button" onclick="markAllBulkStatus('Present')" style="background:#28a745;">✅ Mark All Present</button>
+    <button type="button" onclick="markAllBulkStatus('Absent')" style="background:#dc3545;">❌ Mark All Absent</button>
+    <br><br>
+    <button type="button" id="saveBulkEntriesBtn" style="background:#007bff;">💾 Save All Entries</button>
+    <button type="button" id="clearBulkFormBtn" style="background:#6c757d;">🗑️ Clear Form</button>
+</div>
+`;
 
     container.innerHTML = formHTML;
 
@@ -270,9 +279,9 @@ function loadBulkEntryForm() {
 
     // Add real-time OT conversion
     container.addEventListener('blur', function(e) {
-        if (e.target.classList.contains('bulk-ot')) {
-            convertBulkOThours(e.target);
-        }
+if (e.target.classList.contains('bulk-total-hours')) {
+    convertBulkOThours(e.target);
+}
     }, true);
 
     container.addEventListener('click', function(e) {
@@ -281,6 +290,34 @@ function loadBulkEntryForm() {
         }
     });
 }
+
+function calculateBulkStatusAndOT(totalHours) {
+    totalHours = parseFloat(totalHours) || 0;
+
+    if (totalHours >= 8) {
+        return {
+            status: 'Present',
+            otHours: totalHours - 8
+        };
+    } else {
+        return {
+            status: 'Absent',
+            otHours: totalHours
+        };
+    }
+}
+
+function markAllBulkStatus(status) {
+    document.querySelectorAll('.bulk-status').forEach(select => {
+        select.value = status;
+    });
+
+    document.querySelectorAll('.bulk-total-hours').forEach(input => {
+        if (status === 'Absent') input.value = '0';
+        if (status === 'Present' && input.value === '0') input.value = '8';
+    });
+}
+
 function saveBulkEntries() {
     console.log("=== SAVE BULK ENTRIES STARTED ===");
 
@@ -296,41 +333,40 @@ function saveBulkEntries() {
     let entriesAdded = 0;
     const newEntries = [];
 
-    // Process each row
     for (let i = 0; i < rows.length; i++) {
         const row = rows[i];
         const employeeId = row.dataset.employeeId;
         const employee = employees.find(emp => emp.id === employeeId);
         if (!employee) continue;
 
-        const statusSelect = row.querySelector('.bulk-status');
-        const status = statusSelect ? statusSelect.value : 'Present';
+        // 👉 TOTAL HOURS INPUT
+        const totalHoursInput = row.querySelector('.bulk-total-hours');
 
-        // Skip absent employees (no entry needed)
-        if (status === 'Absent') continue;
-
-        const otInput = row.querySelector('.bulk-ot');
-
-        // FIX: Use the stored decimal value instead of converting again
-        let otHours = 0;
-        if (otInput.dataset.decimalValue) {
-            // Use the pre-calculated decimal value
-            otHours = parseFloat(otInput.dataset.decimalValue);
-            console.log("Using stored decimal value:", otHours);
+        let totalHours = 0;
+        if (totalHoursInput.dataset.decimalValue) {
+            totalHours = parseFloat(totalHoursInput.dataset.decimalValue);
         } else {
-            // Fallback: convert if no stored value
-            otHours = convertBulkOThours(otInput);
-            console.log("Converted value:", otHours);
+            totalHours = convertBulkOThours(totalHoursInput);
         }
 
-        const workInput = row.querySelector('.bulk-work');
-        const workDescription = workInput ? workInput.value.trim() : '';
+        // 👉 AUTO CALCULATE STATUS + OT
+        const result = calculateBulkStatusAndOT(totalHours);
+        const status = result.status;
+        const otHours = result.otHours;
 
-        const advanceInput = row.querySelector('.bulk-advance');
-        const salaryAdvance = advanceInput ? parseFloat(advanceInput.value) || 0 : 0;
+        // OPTIONAL: skip completely zero rows
+        if (totalHours === 0 && status === 'Absent') {
+            continue;
+        }
 
-        const notesInput = row.querySelector('.bulk-notes');
-        const notes = notesInput ? notesInput.value.trim() : '';
+        const workDescription =
+            row.querySelector('.bulk-work')?.value.trim() || '';
+
+        const salaryAdvance =
+            parseFloat(row.querySelector('.bulk-advance')?.value) || 0;
+
+        const notes =
+            row.querySelector('.bulk-notes')?.value.trim() || '';
 
         const entry = {
             id: Date.now() + i,
@@ -347,7 +383,6 @@ function saveBulkEntries() {
             shift: ''
         };
 
-        console.log("Final entry OT hours:", entry.otHours);
         newEntries.push(entry);
         entriesAdded++;
     }
@@ -356,15 +391,18 @@ function saveBulkEntries() {
         entries.push(...newEntries);
         saveEntries();
         loadEntries();
+
         showStatus(`✅ ${entriesAdded} bulk entries saved successfully!`, 'success');
 
         setTimeout(() => {
             container.innerHTML = '';
         }, 1500);
     } else {
-        showStatus('No entries were added.', 'warning');
+        showStatus('No valid entries to save.', 'warning');
     }
 }
+
+
 function removeEmployeeFromBulk(buttonElement) {
     const row = buttonElement.closest('tr');
     const employeeName = row.querySelector('td').textContent;
