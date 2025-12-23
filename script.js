@@ -800,6 +800,24 @@ function handleFileImport(event) {
 }
 
 // ========== PRINT REPORT ==========
+
+function calculateDailyHours(entry) {
+    if (entry.status !== 'Present') return 0;
+    const ot = parseFloat(entry.otHours) || 0;
+    return 8 + ot;
+}
+
+
+function formatHoursToHM(decimalHours) {
+    if (!decimalHours || decimalHours <= 0) return '0:00';
+
+    const hours = Math.floor(decimalHours);
+    const minutes = Math.round((decimalHours - hours) * 60);
+
+    return `${hours}:${minutes.toString().padStart(2, '0')}`;
+}
+
+
 function printReport() {
     const employeeId = document.getElementById('employeeSelect').value;
     const month = document.getElementById('monthSelector').value;
@@ -814,6 +832,10 @@ function printReport() {
 
     // Ensure numeric sum for OT hours
     const totalOTHours = monthlyEntries.reduce((sum, e) => sum + (parseFloat(e.otHours) || 0), 0);
+    const totalMonthlyHours = monthlyEntries.reduce((sum, e) => {
+    return sum + calculateDailyHours(e);
+}, 0);
+
     const totalAdvance = monthlyEntries.reduce((sum, e) => sum + (parseFloat(e.salaryAdvance) || 0), 0);
     let earnedWages = 0;
     let summaryDetailsHTML = '';
@@ -888,6 +910,12 @@ function printReport() {
             <tr><td>Daily Wage Rate:</td><td>₹${employee.dailyWage}</td></tr>
             <tr><td>Total Days Worked:</td><td>${totalDaysWorked}</td></tr>
             <tr><td>Total OT Hours:</td><td>${totalOTHours.toFixed(2)}</td></tr>
+            <tr>
+    <td><b>Total Hours Worked (Month):</b></td>
+    <td><b>${formatHoursToHM(totalMonthlyHours)}</b></td>
+
+</tr>
+
         `;
 
         // NEW: Total Hours Worked for daily employees
@@ -903,20 +931,33 @@ function printReport() {
             <p><strong>Salary Sheet for: ${employee.name} - ${effectiveMonth}</strong></p>
         </div>
         <table>
-            <tr><th>Date</th><th>Work</th><th>Status</th><th>OT</th><th>Piece Name</th><th>Pieces</th><th>Advance</th><th>Notes</th></tr>`;
+            <tr>
+    <th>Date</th>
+    <th>Work</th>
+    <th>Status</th>
+    <th>OT</th>
+    <th>Hours Worked</th>
+    <th>Piece Name</th>
+    <th>Pieces</th>
+    <th>Advance</th>
+    <th>Notes</th>
+</tr>
+`;
 
     monthlyEntries.sort((a,b) => new Date(a.date) - new Date(b.date)).forEach(entry => {
-        reportHTML += `
-            <tr>
-                <td>${formatDate(entry.date)}</td>
-                <td>${entry.work || '-'}</td>
-                <td>${entry.status}</td>
-                <td>${entry.otHours}</td>
-                <td>${entry.pieceName || '-'}</td>
-                <td>${entry.piecesFinished || '-'}</td>
-                <td>${entry.salaryAdvance}</td>
-                <td>${entry.notes || '-'}</td>
-            </tr>`;
+const dailyHours = calculateDailyHours(entry);
+reportHTML += `
+<tr>
+    <td>${formatDate(entry.date)}</td>
+    <td>${entry.work || '-'}</td>
+    <td>${entry.status}</td>
+    <td>${entry.otHours}</td>
+    <td>${formatHoursToHM(dailyHours)}</td>
+    <td>${entry.pieceName || '-'}</td>
+    <td>${entry.piecesFinished || '-'}</td>
+    <td>${entry.salaryAdvance}</td>
+    <td>${entry.notes || '-'}</td>
+</tr>`;
     });
 
     reportHTML += `
